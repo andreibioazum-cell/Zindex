@@ -1,0 +1,26 @@
+name: Initial_Copy
+
+on: 
+  workflow_dispatch: # Кнопка появится здесь
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone and Clean
+        run: |
+          git clone https://github.com/fogleman/Craft.git temp
+          rm -rf temp/.git
+          cp -rn temp/* .
+          rm -rf temp
+
+      - name: Push
+        run: |
+          git config --global user.name "VoxelBot"
+          git config --global user.email "bot@voxel.com"
+          git add .
+          git commit -m "Clean Copy" || echo "No changes to commit"
+          git push origin main
