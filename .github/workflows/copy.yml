@@ -7,6 +7,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download stb_image.h
+        run: |
+          wget https://raw.githubusercontent.com/nothings/stb/master/stb_image.h
+
       - name: Set up NDK
         uses: nttld/setup-ndk@v1
         with:
@@ -55,7 +59,16 @@ jobs:
           cp libmain_64.so staging/lib/arm64-v8a/libmain.so
           cp libmain_32.so staging/lib/armeabi-v7a/libmain.so
           
-          # Копируем текстуры если есть
+          # Создаем простые текстуры если их нет
+          if [ ! -f grass.png ]; then
+            echo "Creating dummy grass texture..."
+            convert -size 16x16 xc:green grass.png 2>/dev/null || echo "install imagemagick for textures"
+          fi
+          if [ ! -f stone.png ]; then
+            echo "Creating dummy stone texture..."
+            convert -size 16x16 xc:gray stone.png 2>/dev/null || echo "install imagemagick for textures"
+          fi
+          
           [ -f grass.png ] && cp grass.png staging/assets/ || true
           [ -f stone.png ] && cp stone.png staging/assets/ || true
 
