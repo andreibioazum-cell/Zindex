@@ -1,26 +1,70 @@
-name: Initial_Copy
-
-on: 
-  workflow_dispatch: # Кнопка появится здесь
+name: Build Universal APK
+on: [push, workflow_dispatch]
 
 jobs:
-  copy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Clone and Clean
-        run: |
-          git clone https://github.com/fogleman/Craft.git temp
-          rm -rf temp/.git
-          cp -rn temp/* .
-          rm -rf temp
+      - name: Set up NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r25c
 
-      - name: Push
+      - name: Build Libraries (64 and 32 bit)
         run: |
-          git config --global user.name "VoxelBot"
-          git config --global user.email "bot@voxel.com"
-          git add .
-          git commit -m "Clean Copy" || echo "No changes to commit"
-          git push origin main
+          # 64-bit
+          $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang \
+          -shared -fPIC main.c $ANDROID_NDK_ROOT/sources/android/native_app_glue/android_native_app_glue.c \
+          -o libmain_64.so -I$ANDROID_NDK_ROOT/sources/android/native_app_glue \
+          -landroid -llog -lGLESv2 -lEGL -lm
+
+          # 32-bit
+          $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi30-clang \
+          -shared -fPIC main.c $ANDROID_NDK_ROOT/sources/android/native_app_glue/android_native_app_glue.c \
+          -o libmain_32.so -I$ANDROID_NDK_ROOT/sources/android/native_app_glue \
+          -landroid -llog -lGLESv2 -lEGL -lm
+
+      - name: Create APK
+        run: |
+          cat <<EOF > AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.cubic.craft">
+              <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
+              <application android:label="Cubic Craft" android:hasCode="false">
+                  <activity android:name="android.app.NativeActivity" android:exported="true">
+                      <meta-data android:name="android.app.lib_name" android:value="main" />
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          
+          BUILD_TOOLS=$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools/ | tail -n 1)
+          PLATFORM_JAR=$(ls $ANDROID_HOME/platforms/*/android.jar | tail -n 1)
+          
+          mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a
+          cp libmain_64.so staging/lib/arm64-v8a/libmain.so
+          cp libmain_32.so staging/lib/armeabi-v7a/libmain.so
+
+          # Копируем текстуры
+          mkdir -p staging/assets
+          cp grass.png staging/assets/ 2>/dev/null || true
+          cp stone.png staging/assets/ 2>/dev/null || true
+
+          $BUILD_TOOLS/aapt package -f -M AndroidManifest.xml -I $PLATFORM_JAR -F unsigned.apk staging/
+          $BUILD_TOOLS/zipalign -v 4 unsigned.apk aligned.apk
+          
+          mkdir -p ~/.android
+          keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug, O=Android, C=US" || true
+          $BUILD_TOOLS/apksigner sign --ks ~/.android/debug.keystore --ks-pass pass:android --out final.apk aligned.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cubic-Craft-APK
+          path: final.apk
