@@ -187,6 +187,28 @@ static void game_render(Game* g) {
     glUniformMatrix4fv(g->mvp,1,GL_FALSE,mvp.m);
     glUniform1i(g->tex,0);
     
+    // Вершинные данные для куба (треугольники вместо QUADS)
+    float cube_verts[] = {
+        // Передняя
+        -0.5,-0.5,0.5, 0,0,  0.5,-0.5,0.5, 1,0,  0.5,0.5,0.5, 1,1,
+        -0.5,-0.5,0.5, 0,0,  0.5,0.5,0.5, 1,1,  -0.5,0.5,0.5, 0,1,
+        // Задняя
+        -0.5,-0.5,-0.5, 0,0,  -0.5,0.5,-0.5, 1,0,  0.5,0.5,-0.5, 1,1,
+        -0.5,-0.5,-0.5, 0,0,  0.5,0.5,-0.5, 1,1,  0.5,-0.5,-0.5, 0,1,
+        // Левая
+        -0.5,-0.5,-0.5, 0,0,  -0.5,-0.5,0.5, 1,0,  -0.5,0.5,0.5, 1,1,
+        -0.5,-0.5,-0.5, 0,0,  -0.5,0.5,0.5, 1,1,  -0.5,0.5,-0.5, 0,1,
+        // Правая
+        0.5,-0.5,-0.5, 0,0,  0.5,0.5,-0.5, 1,0,  0.5,0.5,0.5, 1,1,
+        0.5,-0.5,-0.5, 0,0,  0.5,0.5,0.5, 1,1,  0.5,-0.5,0.5, 0,1,
+        // Нижняя
+        -0.5,-0.5,-0.5, 0,0,  -0.5,-0.5,0.5, 0,1,  0.5,-0.5,0.5, 1,1,
+        -0.5,-0.5,-0.5, 0,0,  0.5,-0.5,0.5, 1,1,  0.5,-0.5,-0.5, 1,0,
+        // Верхняя
+        -0.5,0.5,-0.5, 0,0,  -0.5,0.5,0.5, 0,1,  0.5,0.5,0.5, 1,1,
+        -0.5,0.5,-0.5, 0,0,  0.5,0.5,0.5, 1,1,  0.5,0.5,-0.5, 1,0
+    };
+    
     for(int ci=0;ci<g->world.count;ci++) {
         Chunk* c=&g->world.chunks[ci];
         for(int bx=0;bx<CHUNK_SIZE;bx++)
@@ -196,20 +218,18 @@ static void game_render(Game* g) {
             if(b->type==AIR) continue;
             GLuint tex=(b->type==GRASS)?g->grass:g->stone;
             glBindTexture(GL_TEXTURE_2D,tex);
-            float x=c->pos.x+bx, y=c->pos.y+by, z=c->pos.z+bz;
-            float verts[]={
-                x,y,z,0,0, x+1,y,z,1,0, x+1,y+1,z,1,1, x,y+1,z,0,1,
-                x,y,z+1,0,0, x,y+1,z+1,1,0, x+1,y+1,z+1,1,1, x+1,y,z+1,0,1,
-                x,y,z,0,0, x,y,z+1,1,0, x,y+1,z+1,1,1, x,y+1,z,0,1,
-                x+1,y,z,0,0, x+1,y+1,z,1,0, x+1,y+1,z+1,1,1, x+1,y,z+1,0,1,
-                x,y,z,0,0, x,y,z+1,0,1, x+1,y,z+1,1,1, x+1,y,z,1,0,
-                x,y+1,z,0,0, x+1,y+1,z,1,0, x+1,y+1,z+1,1,1, x,y+1,z+1,0,1
-            };
+            
+            float x=c->pos.x+bx+0.5f, y=c->pos.y+by+0.5f, z=c->pos.z+bz+0.5f;
+            float verts[36*5];
+            for(int i=0;i<36*5;i++) {
+                if(i%5<3) verts[i] = cube_verts[i] + (i%5==0?x:(i%5==1?y:z));
+                else verts[i] = cube_verts[i];
+            }
             glEnableVertexAttribArray(g->pos);
             glEnableVertexAttribArray(g->uv);
             glVertexAttribPointer(g->pos,3,GL_FLOAT,GL_FALSE,5*sizeof(float),verts);
             glVertexAttribPointer(g->uv,2,GL_FLOAT,GL_FALSE,5*sizeof(float),verts+3);
-            glDrawArrays(GL_QUADS,0,24);
+            glDrawArrays(GL_TRIANGLES,0,36);
         }
     }
     glDisableVertexAttribArray(g->pos);
@@ -278,5 +298,5 @@ static void cmd(struct android_app* app, int32_t cmd) {
 
 void android_main(struct android_app* state) {
     struct engine e={0}; state->userData=&e; state->onAppCmd=cmd; state->onInputEvent=input; e.app=state;
-    while(1){ int ev; struct android_poll_source* src; while(ALooper_pollAll(e.dpy?0:-1,0,&ev,(void**)&src)>=0){ if(src) src->process(state,src); if(state->destroyRequested) return; } if(e.dpy){ game_update(&e.game); game_render(&e.game); eglSwapBuffers(e.dpy,e.surf); } }
+    while(1){ int ev; struct android_poll_source* src; while(ALooper_pollOnce(e.dpy?0:-1,0,&ev,(void**)&src)>=0){ if(src) src->process(state,src); if(state->destroyRequested) return; } if(e.dpy){ game_update(&e.game); game_render(&e.game); eglSwapBuffers(e.dpy,e.surf); } }
 }
