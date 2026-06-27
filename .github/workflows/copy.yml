@@ -17,13 +17,17 @@ jobs:
           # 64-bit
           $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android30-clang \
           -shared -fPIC main.c $ANDROID_NDK_ROOT/sources/android/native_app_glue/android_native_app_glue.c \
-          -o libmain_64.so -I$ANDROID_NDK_ROOT/sources/android/native_app_glue \
+          -o libmain_64.so \
+          -I$ANDROID_NDK_ROOT/sources/android/native_app_glue \
+          -I$ANDROID_NDK_ROOT/sysroot/usr/include \
           -landroid -llog -lGLESv2 -lEGL -lm
 
           # 32-bit
           $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi30-clang \
           -shared -fPIC main.c $ANDROID_NDK_ROOT/sources/android/native_app_glue/android_native_app_glue.c \
-          -o libmain_32.so -I$ANDROID_NDK_ROOT/sources/android/native_app_glue \
+          -o libmain_32.so \
+          -I$ANDROID_NDK_ROOT/sources/android/native_app_glue \
+          -I$ANDROID_NDK_ROOT/sysroot/usr/include \
           -landroid -llog -lGLESv2 -lEGL -lm
 
       - name: Create APK
@@ -47,14 +51,13 @@ jobs:
           BUILD_TOOLS=$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools/ | tail -n 1)
           PLATFORM_JAR=$(ls $ANDROID_HOME/platforms/*/android.jar | tail -n 1)
           
-          mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a
+          mkdir -p staging/lib/arm64-v8a staging/lib/armeabi-v7a staging/assets
           cp libmain_64.so staging/lib/arm64-v8a/libmain.so
           cp libmain_32.so staging/lib/armeabi-v7a/libmain.so
-
-          # Копируем текстуры
-          mkdir -p staging/assets
-          cp grass.png staging/assets/ 2>/dev/null || true
-          cp stone.png staging/assets/ 2>/dev/null || true
+          
+          # Копируем текстуры если есть
+          [ -f grass.png ] && cp grass.png staging/assets/ || true
+          [ -f stone.png ] && cp stone.png staging/assets/ || true
 
           $BUILD_TOOLS/aapt package -f -M AndroidManifest.xml -I $PLATFORM_JAR -F unsigned.apk staging/
           $BUILD_TOOLS/zipalign -v 4 unsigned.apk aligned.apk
